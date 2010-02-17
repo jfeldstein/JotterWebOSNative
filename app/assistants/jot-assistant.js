@@ -2,7 +2,7 @@ function JotAssistant() {
 }
 
 JotAssistant.prototype.setup = function() {
-	this.jotter = new Jotter();
+	this.jotter = new Jotter(this.controller);
 	var email = this.jotter.getEmail();
 	var message = this.jotter.getMessage();
 	this.controller.setupWidget("EmailField", {modelProperty:"address", hintText:$L("Email Address...")}, 
@@ -16,9 +16,29 @@ JotAssistant.prototype.setup = function() {
 	this.emailField = this.controller.get("EmailField");
 	this.jotField = this.controller.get("JotField");
 	
+	this.controller.setupWidget(Mojo.Menu.commandMenu,
+		{ spacerHeight: 0, menuClass: 'no-fade' },
+    	{
+			visible: true,
+			items: [ 
+				{ icon: "attach", command: "add-photo"}
+			]
+		});
+
+	this.controller.setupWidget(Mojo.Menu.appMenu,
+	    {omitDefaultItems:true},
+	    {
+	        visible:true,
+	        items: [
+	            Mojo.Menu.editItem,
+	            {label: "Help", command:Mojo.Menu.helpCmd},
+	            {label: "More Mijoro Apps...", command: 'do-mijoro'}
+	        ]
+	    })
 }
 
-JotAssistant.prototype.activate = function() {
+JotAssistant.prototype.activate = function(params) {
+	
 	if(this.jotter.getEmail()) {
 		this.controller.get("JotField").mojo.focus();
 	} else {
@@ -26,12 +46,12 @@ JotAssistant.prototype.activate = function() {
 		
 		//	Check for first use
 		var firstUseCookie = new Mojo.Model.Cookie('not_first_use');
-		var firstUse =  firstUseCookie.get() || {};
+		var firstUse = firstUseCookie.get() || {};
 		if( !firstUse.hasBeenShown ) {
 			//	If first use, interrupt with firstUse scene. This lets the
 			//	Jot Scene load faster in cases where it's not first use :)
 			firstUseCookie.put({hasBeenShown: true});
-			this.controller.stageController.pushScene('firstUse');
+			this.controller.stageController.pushScene('firstUse', {mode:'first-use'});
 		}
 	}
 	
@@ -40,6 +60,12 @@ JotAssistant.prototype.activate = function() {
 	
 	this.windowResized();
 	this.controller.listen(this.controller.window, "resize", this.windowResized.bind(this));
+	
+	if(!params){ return; }
+	if(params.filename) {
+		// Scene being relaunched, with a new photo
+		this.jotter.fileToAttach = params.filename;
+	}
 }
 
 JotAssistant.prototype.deactivate = function(){
@@ -126,7 +152,35 @@ JotAssistant.prototype.serverResponse = function(success) {
 	});
 }
 
-JotAssistant.prototype.cleanup = function(event) {
-	/* this function should do any cleanup needed before the scene is destroyed as 
-	   a result of being popped off the scene stack */
+JotAssistant.prototype.handleCommand = function(event) {
+    if (event.type == Mojo.Event.commandEnable) {
+        switch(event.command) {
+            case Mojo.Menu.helpCmd:
+                event.preventDefault();
+        }
+    }
+    if (event.type == Mojo.Event.command) {
+        switch(event.command) {
+            case Mojo.Menu.helpCmd:
+                this.controller.stageController.pushScene('firstUse', {mode:'help'})
+                break;
+            case 'do-mijoro':
+                this.controller.serviceRequest("palm://com.palm.applicationManager", {
+                   method: "open",
+                   parameters:  {
+                       id: 'com.palm.app.browser',
+                       params: {
+                           target: "http://mijoro.com"
+                       }
+                   }
+                 });
+                 break;
+			case 'add-photo':
+				this.controller.stageController.pushScene(
+				             { appId :'com.palm.app.camera', name: 'capture' },
+				             { sublaunch : true }
+				         );
+				break;
+        }
+    }
 }

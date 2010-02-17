@@ -1,5 +1,6 @@
 var Jotter = Class.create({
-	initialize:function(){
+	initialize:function(controller){
+		this.controller = controller;
 		this.cookie = new Mojo.Model.Cookie("jotterCookie");
 		this.cookieValue = this.cookie.get();
 		if(this.cookieValue) {
@@ -26,22 +27,49 @@ var Jotter = Class.create({
 	getMessage:function(){
 		return this.message;
 	},
-	urlTemplate:"http://mijoro.com/jot-service.php?to=#{to}&subject=#{message}&body=This message was sent by Mijoro Jotter (http://mijoro.com/jotter).&key=#{key}",
+	url:"http://jotterapi.appspot.com",
 	jot:function(value, callback){
 		var key = MD5(this.email + value + "MeezesHash");
-		var url = this.urlTemplate.interpolate({
-			to:this.email,
-			message:value,
-			key:key
-		});
-		console.log(url);
-		new Ajax.Request(url, {
-			onComplete:this.onServerResponse.curry(callback)
-		})
+		var url = this.url;
+		
+		if(this.fileToAttach){
+			this.controller.serviceRequest('palm://com.palm.downloadmanager/', {
+			 	method: 'upload', 
+			 	parameters: {
+			 		'fileName': this.fileToAttach,
+			 		'url': url,
+			 		'contentType': 'img',
+			 		subscribe: true,
+					postParameters: {
+				      to:this.email,
+				      message:value,
+				      key:key
+				    }
+			 	},
+				onSuccess: this.onUploadStarted.curry(callback)
+			  });
+			this.fileToAttach = null;
+		} else {
+			new Ajax.Request(url, {
+			    method: 'post',
+			    parameters: {
+			      to:this.email,
+			      message:value,
+			      key:key  
+			    },
+				onComplete:this.onServerResponse.curry(callback)
+			});
+		}
+	},
+	onUploadStarted: function(callback, resp){
+		Mojo.Log.error("resp: "+Object.toJSON(resp));
+		
+		// TODO: Waiting for response to subscription that includes responseString and completionCode
+		if(resp.responseString){
+			callback(resp.responseString == "1");
+		}
 	},
 	onServerResponse:function(callback, resp){
-		Mojo.Log.error("RESP IS " + Object.toJSON(resp));
-			
 		callback(resp.responseText == "1");
 	}
 })
